@@ -114,6 +114,8 @@ input[type="email"]:focus { border-color: var(--navy); }
   transition: all .2s;
 }
 .doc-status.done { background: var(--navy); border-color: var(--navy); }
+.doc-status.rejected-status { background: #c0392b; border-color: #c0392b; }
+.doc-item.rejected { background: #fdf0ee !important; }
 .doc-status.done svg path { stroke: white; }
 
 .doc-info { flex: 1; min-width: 0; }
@@ -389,7 +391,15 @@ async function loadPortal() {
 function isUploaded(docTypeId) {
   return uploadedDocs.some(d => {
     const linked = d.fields['Document Type'];
-    return linked && linked.includes(docTypeId);
+    const status = d.fields['Review Status'];
+    return linked && linked.includes(docTypeId) && status !== 'Rejected';
+  });
+}
+
+function isRejected(docTypeId) {
+  return uploadedDocs.some(d => {
+    const linked = d.fields['Document Type'];
+    return linked && linked.includes(docTypeId) && d.fields['Review Status'] === 'Rejected';
   });
 }
 
@@ -427,17 +437,22 @@ function renderChecklist() {
       const isRequired = doc.fields['Required'];
       
       const desc = docDescriptions[doc.fields['Document Name']] || '';
+      const rejected = isRejected(doc.id);
       const item = document.createElement('div');
-      item.className = `doc-item${uploaded ? ' uploaded' : ''}`;
+      item.className = `doc-item${uploaded ? ' uploaded' : ''}${rejected ? ' rejected' : ''}`;
+      const rejectedDoc = rejected ? uploadedDocs.find(d => d.fields['Document Type']?.includes(doc.id)) : null;
+      const rejectedNote = rejectedDoc?.fields['Notes'] || '';
       item.innerHTML = `
-        <div class="doc-status${uploaded ? ' done' : ''}">
+        <div class="doc-status${uploaded ? ' done' : ''}${rejected ? ' rejected-status' : ''}">
           ${uploaded ? `<svg width="12" height="10" viewBox="0 0 12 10"><path d="M1 5L4.5 8.5L11 1" stroke="#888" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>` : ''}
+          ${rejected ? `<svg width="10" height="10" viewBox="0 0 10 10"><path d="M1 1L9 9M9 1L1 9" stroke="#fff" stroke-width="1.8" stroke-linecap="round"/></svg>` : ''}
         </div>
         <div class="doc-info">
-          <div class="doc-name">${doc.fields['Document Name']}</div>
+          <div class="doc-name" style="${rejected ? 'color:#c0392b' : ''}">${doc.fields['Document Name']}${rejected ? ' <span style="font-size:10px;background:#fdf0ee;color:#c0392b;padding:2px 6px;border-radius:2px;font-weight:700">NEEDS RESUBMISSION</span>' : ''}</div>
           ${uploaded ? `<div class="doc-meta">Received ${uploadedDoc?.fields['Upload Date'] ? new Date(uploadedDoc.fields['Upload Date']).toLocaleDateString('en-US',{month:'short',day:'numeric'}) : 'recently'}</div>` : ''}
-          ${!isRequired ? '<div class="doc-optional">OPTIONAL</div>' : ''}
-          ${desc && !uploaded ? `<div class="doc-desc" style="display:none;font-size:13px;color:#111;font-weight:600;margin-top:6px;line-height:1.5;padding:8px 10px;background:#eef2fb;border-left:3px solid #1455d4;border-radius:0 4px 4px 0">${desc}</div>` : ''}
+          ${rejected ? `<div class="doc-meta" style="color:#c0392b;font-weight:600;margin-top:4px">⚠ ${rejectedNote || 'Document was rejected — please resubmit'}</div>` : ''}
+          ${!isRequired && !rejected ? '<div class="doc-optional">OPTIONAL</div>' : ''}
+          ${desc && !uploaded && !rejected ? `<div class="doc-desc" style="display:none;font-size:13px;color:#111;font-weight:600;margin-top:6px;line-height:1.5;padding:8px 10px;background:#eef2fb;border-left:3px solid #1455d4;border-radius:0 4px 4px 0">${desc}</div>` : ''}
         </div>
         <div class="doc-action${uploaded ? '' : ' upload-btn'}">${uploaded ? '✓ DONE' : '↑ UPLOAD'}</div>
       `;
@@ -487,7 +502,7 @@ function openModal(doc) {
   document.getElementById('modalDocName').textContent = doc.fields['Document Name'];
   const desc = docDescriptions[doc.fields['Document Name']] || '';
   const descEl = document.getElementById('modalDocDesc');
-  if(desc) { descEl.textContent = desc; descEl.style.display = 'block'; }
+  if(desc) { descEl.innerHTML = desc; descEl.style.display = 'block'; }
   else { descEl.style.display = 'none'; }
   document.getElementById('selectedFileName').textContent = '';
   document.getElementById('modalNote').value = '';
